@@ -93,6 +93,44 @@ python main_online_STEADY.py \
 
 `--agent_path` must contain `best_actor.pth`, `best_critic.pth`, and `best_feature_mu.pth` from stage 1. `--log_path` is a user-provided radio CSV (or a directory of CSVs). This repository does not ship flight logs. `--feature_dim` must match stage 1 (paper: 512). `max_timesteps` here is **gradient steps** on the offline buffer, not simulator steps.
 
+## MATLAB Simulink evaluation (`deploy/sim_to_sim`)
+
+Requires MATLAB with Simulink. In MATLAB, set the current folder to `deploy/sim_to_sim/` so `parameter/` and `quadrotor_mellinger.slx` resolve.
+
+Typical pipeline: export gains from a trained actor, optionally inspect one task, write `.mat` files, then batch-evaluate eight tasks.
+
+1. **Export gains** from `best_actor.pth` / `last_actor.pth`:
+
+   ```bash
+   python scripts/pth_reader.py --pth path/to/best_actor.pth
+   ```
+
+   Copy the printed `Kp_lin` … `Ki_rot` block. Replace `path/to/best_actor.pth` with your local checkpoint.
+
+2. **`param_set.m`** — paste or uncomment one gain set and set `init_pos` / `goal_pos` (and optional sensor-bias / pulse flags). Then run `quadrotor_mellinger.slx` in Simulink to inspect **that** controller on **that** task. This script does not load `.mat` files and does not report the eight-task scores.
+
+3. **`generate_mat_files.m`** — paste the same MATLAB blocks into `raw_data` (a `% FileName` comment, then the six gain lines). Running it writes `parameter/<FileName>.mat` for `main2.m` to load. The repository ships `parameter/` empty; generate the files locally.
+
+4. **`main2.m`** — set `param_file` to a stem in `parameter/` (without `.mat`). It loads those controller gains and runs **eight** Simulink tasks (hover, takeoff, 3-D step, pulse; each with and without sensor bias) and prints task-success and convergence for each.
+
+## Plotting and checkpoint tools (`scripts/`)
+
+Pass **your** log or CSV paths; nothing is hardcoded to a machine.
+
+```bash
+# Mellinger gains from an actor checkpoint (for param_set.m / generate_mat_files.m)
+python scripts/pth_reader.py --pth path/to/best_actor.pth
+
+# Sim-to-sim bar charts (fill success/convergence counts in the script first)
+python scripts/plot_validation.py --output-dir path/to/output_figures
+
+# Evaluation curves from W&B-exported evaluation CSVs
+python scripts/plot_evaluation.py --root path/to/wandb_evaluation_csvs --param beta
+
+# Training-reward curves from W&B-exported reward CSVs
+python scripts/plot_smooth.py --data-dir path/to/wandb_reward_csvs --param batch
+```
+
 ## Hardware deployment
 
 Waiting update.
@@ -109,6 +147,8 @@ train/math/hsic.py         # nHSIC (Ma et al. 2020)
 train/networks/features.py
 train/utils/env.py         # paper reward + DR wrapper
 train/utils/buffer.py      # sim replay + radio CSV loader
+deploy/sim_to_sim/         # MATLAB/Simulink 8-task evaluation
+scripts/                   # pth_reader and training/eval plots
 env/                       # gym-pybullet-drones submodule
 environment.yml
 ```

@@ -1,4 +1,9 @@
-%% setup_params.m
+%% param_set.m
+% Set Mellinger PID gains and a single initial/goal pose, then run
+% quadrotor_mellinger.slx to inspect that controller interactively.
+% Uncomment (or paste) one gain block below. Gains can be copied from
+% scripts/pth_reader.py. This script does not sweep the 8 evaluation
+% tasks; use main2.m for batch success/convergence reporting.
 clear; clc;
 
 %% --- 1. Simulation setting --- (not really used)

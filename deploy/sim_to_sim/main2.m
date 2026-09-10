@@ -1,4 +1,10 @@
-%% setup_params.m - Automated Simulation and Testing Framework
+%% main2.m
+% Load Mellinger gains from parameter/<param_file>.mat and evaluate them
+% on eight Simulink tasks (hover, takeoff, 3-D step, pulse; each with and
+% without sensor bias). Prints task-success and convergence for every task.
+% Generate the .mat files first with generate_mat_files.m. Open
+% quadrotor_mellinger.slx is not required beforehand; this script calls
+% sim(model_name). Set param_file below to a stem in parameter/.
 clear;
 clc;
 

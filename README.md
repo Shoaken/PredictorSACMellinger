@@ -44,33 +44,77 @@ pip install -e env
 
 `environment.yml` was exported on **Windows** with `--no-builds`. On Linux or CPU-only machines, create a Python 3.10 env with matching `pytorch`, `gymnasium`, `pybullet`, `numpy`, `scipy`, `pandas`, and `wandb`, then `pip install -e env`.
 
-Run scripts from the **repository root** so `import train` and `import env.gym_pybullet_drones` resolve.
+Run commands from the **repository root** so `import train` and `import env.gym_pybullet_drones` resolve.
 
-Weights & Biases is imported by the training scripts. Use `--wandb_offline` on machines without internet.
+Weights & Biases is imported by the training scripts. Use `--wandb-offline` (wrappers) or `--wandb_offline` (`main_pyb_train.py`) on machines without internet.
+
+### Check the environment
+
+`scripts/smoke_test` runs a few environment steps so you can confirm PyBullet, the Mellinger actor, and CUDA/CPU import. It is **not** a paper-length run (the training loop still starts with 10 eval episodes).
+
+Activate `drones` first. On Windows Anaconda Prompt / cmd, `bash` is often WSL and may fail — use the `.bat` file:
+
+```bat
+scripts\smoke_test.bat
+scripts\smoke_test.bat --all
+```
+
+On Linux, macOS, or Git Bash:
+
+```bash
+bash scripts/smoke_test.sh
+bash scripts/smoke_test.sh --all
+```
+
+Git Bash does not load conda by default. Either source Anaconda's `etc/profile.d/conda.sh` and `conda activate drones`, or set `PYTHON` to the `drones` interpreter:
+
+```bash
+PYTHON=/path/to/drones/python bash scripts/smoke_test.sh
+```
 
 ## Simulation training
 
-Paper defaults: \(B=256\), \(\gamma=0.99\), \(\tau=0.005\), `feature_dim=512`, `hidden_dim=256`, actor lr \(3\times 10^{-5}\), critic / Predictor lr \(10^{-4}\), \(\lambda=0.25\), \(\beta=1\), \(N_\mathrm{Pred}=2\) (`--extra_feature_steps 1`). Reward weights: position \(2.5\), roll/pitch \(1.5\), linear/angular velocity \(0.05\), action \(0.1\), plus a \(+2\) offset. Episodes are \(10^6\) environment steps; evaluation every \(10^4\) steps.
+Paper jobs are launched from `scripts/paper_runs.py`. Defaults are the `PAPER` dict at the top of that file: \(B=256\), `feature_dim=512`, `hidden_dim=256`, \(\lambda=0.25\), \(\beta=1\), \(N_\mathrm{Pred}=2\) (`extra_feature_steps=1`), \(10^6\) environment steps, evaluation every \(10^4\) steps, seeds `(1, 42, 123, 456, 789)`, reward weights position \(2.5\), roll/pitch \(1.5\), linear/angular velocity \(0.05\), action \(0.1\). Actor lr \(3\times 10^{-5}\) and critic / Predictor lr \(10^{-4}\) stay in `main_pyb_train.py` / the agents. Edit `PAPER`, or pass flags; you do not need to change `main_pyb_train.py` for the usual sweeps.
 
-**Predictor**
+Wrappers (same flags as `paper_runs.py`):
 
-```bash
-python main_pyb_train.py --alg sac_predictor_IB --env tunable-reward \
-  --seed 1 --batch_size 256 --feature_dim 512 --lam 0.25 --beta 1.0 \
-  --max_timesteps 1000000 --eval_freq 10000
+```bat
+scripts\run_paper.bat --one --seed 1
 ```
 
-**Vanilla SAC** (and STEADY stage 1)
-
 ```bash
-python main_pyb_train.py --alg spederv3 --env tunable-reward --seed 1
+bash scripts/run_paper.sh --one --seed 1
 ```
 
-**DR** (`--alg` and `--env` must both be `domain-randomization`; evaluation uses the unrandomized hover task)
+Or call Python directly: `python scripts/paper_runs.py ...`.
+
+**One run.** Predictor unless you set `--alg`. Override any hyperparameter on the command line (`--lam`, `--beta`, `--batch-size`, `--seed`, `--max-timesteps`, …):
 
 ```bash
-python main_pyb_train.py --alg domain-randomization --env domain-randomization --seed 1
+python scripts/paper_runs.py --one --seed 1 --lam 0.25 --beta 1 --batch-size 256
+python scripts/paper_runs.py --one --alg spederv3 --seed 1
+python scripts/paper_runs.py --one --alg domain-randomization --seed 1 --wandb-offline
 ```
+
+**Paper tables.** `--grid paper` is the unique union (55 jobs at the paper step budget). DR pairs `--alg` and `--env` as `domain-randomization`.
+
+| `--grid` | What it runs |
+|---|---|
+| `comparison` | Predictor \(\lambda=0.25,\beta=1\), Vanilla SAC, DR (5 seeds) |
+| `lambda` | Predictor \(\lambda\in\{0.10,0.25,0.50\}\), \(\beta=1\), \(B=256\) |
+| `beta` | Predictor \(\beta\in\{1,2,4\}\), \(\lambda=0.25\), \(B=256\) |
+| `batch` | Predictor \(B\in\{64,128,256\}\), \(\lambda=0.25\), \(\beta=1\) |
+| `ablation` | \((\lambda,\beta)=(0.25,1)\), \((0,1)\), \((0.25,0)\) |
+| `paper` | Unique union of the rows above |
+
+```bash
+python scripts/paper_runs.py --list --grid comparison
+python scripts/paper_runs.py --grid comparison --dry-run
+python scripts/paper_runs.py --grid paper --wandb-offline
+python scripts/paper_runs.py --grid lambda --from-index 6 --keep-going
+```
+
+`--list` prints jobs and exits. `--dry-run` prints the `main_pyb_train.py` commands. `--from-index N` resumes a grid (1-based). `--seeds 1 42` replaces the paper seed list. `--keep-going` continues after a failed job. `main_pyb_train.py` still works if you prefer to call it directly.
 
 Logs and checkpoints go to
 
@@ -82,7 +126,7 @@ Best-eval files: `best_actor.pth`, `best_critic.pth`, and either `best_predictor
 
 ### STEADY stage 2
 
-Complete STEADY is **two stages**. `spederv3` alone is Vanilla SAC, not STEADY.
+Complete STEADY is **two stages**. `spederv3` (`--grid comparison` Vanilla SAC jobs, or `--one --alg spederv3`) is stage 1 only. Stage 2 is not in `paper_runs.py` because it needs a user radio CSV.
 
 ```bash
 python main_online_STEADY.py \
@@ -99,13 +143,13 @@ Requires MATLAB with Simulink. In MATLAB, set the current folder to `deploy/sim_
 
 Typical pipeline: export gains from a trained actor, optionally inspect one task, write `.mat` files, then batch-evaluate eight tasks.
 
-1. **Export gains** from `best_actor.pth` / `last_actor.pth`:
+1. **Export gains** with `scripts/pth_reader.py` from `best_actor.pth` / `last_actor.pth` (under the `log/...` run directory):
 
    ```bash
    python scripts/pth_reader.py --pth path/to/best_actor.pth
    ```
 
-   Copy the printed `Kp_lin` … `Ki_rot` block. Replace `path/to/best_actor.pth` with your local checkpoint.
+   Copy the printed `Kp_lin` … `Ki_rot` block. Replace `path/to/best_actor.pth` with your local checkpoint. The actor stores PID values directly; the reader does not decode old sigmoid-`_raw` checkpoints.
 
 2. **`param_set.m`** — paste or uncomment one gain set and set `init_pos` / `goal_pos` (and optional sensor-bias / pulse flags). Then run `quadrotor_mellinger.slx` in Simulink to inspect **that** controller on **that** task. This script does not load `.mat` files and does not report the eight-task scores.
 
@@ -113,15 +157,15 @@ Typical pipeline: export gains from a trained actor, optionally inspect one task
 
 4. **`main2.m`** — set `param_file` to a stem in `parameter/` (without `.mat`). It loads those controller gains and runs **eight** Simulink tasks (hover, takeoff, 3-D step, pulse; each with and without sensor bias) and prints task-success and convergence for each.
 
-## Plotting and checkpoint tools (`scripts/`)
+## Plotting (`scripts/`)
 
-Pass **your** log or CSV paths; nothing is hardcoded to a machine.
+Pass **your** paths; nothing is hardcoded to a machine.
 
 ```bash
 # Mellinger gains from an actor checkpoint (for param_set.m / generate_mat_files.m)
 python scripts/pth_reader.py --pth path/to/best_actor.pth
 
-# Sim-to-sim bar charts (fill success/convergence counts in the script first)
+# Sim-to-sim bar charts: fill RESULTS in plot_validation.py from main2.m, then
 python scripts/plot_validation.py --output-dir path/to/output_figures
 
 # Evaluation curves from W&B-exported evaluation CSVs
@@ -140,16 +184,22 @@ Firmware, radio CSV schema, and onboard evaluation protocol will be documented h
 ## Layout
 
 ```
-main_pyb_train.py          # Predictor, Vanilla SAC / STEADY stage 1, DR
-main_online_STEADY.py      # STEADY stage 2
-train/agent/               # SAC, Mellinger actor, Predictor, STEADY, DR
-train/math/hsic.py         # nHSIC (Ma et al. 2020)
+main_pyb_train.py             # Predictor, Vanilla SAC / STEADY stage 1, DR
+main_online_STEADY.py         # STEADY stage 2
+train/agent/                  # SAC, Mellinger actor, Predictor, STEADY, DR
+train/math/hsic.py            # nHSIC (Ma et al. 2020)
 train/networks/features.py
-train/utils/env.py         # paper reward + DR wrapper
-train/utils/buffer.py      # sim replay + radio CSV loader
-deploy/sim_to_sim/         # MATLAB/Simulink 8-task evaluation
-scripts/                   # pth_reader and training/eval plots
-env/                       # gym-pybullet-drones submodule
+train/utils/env.py            # paper reward + DR wrapper
+train/utils/buffer.py         # sim replay + radio CSV loader
+deploy/sim_to_sim/            # MATLAB/Simulink 8-task evaluation
+scripts/paper_runs.py         # paper grids and one-off training
+scripts/run_paper.sh|.bat     # wrappers for paper_runs.py
+scripts/smoke_test.sh|.bat    # environment check (not a paper run)
+scripts/pth_reader.py         # export PID gains from a .pth
+scripts/plot_validation.py    # sim-to-sim success/convergence bars
+scripts/plot_evaluation.py    # W&B evaluation CSVs
+scripts/plot_smooth.py        # W&B reward CSVs
+env/                          # gym-pybullet-drones submodule
 environment.yml
 ```
 

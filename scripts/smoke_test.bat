@@ -15,7 +15,12 @@ if not exist "env\gym_pybullet_drones" (
   exit /b 1
 )
 
-if "%PYTHON%"=="" set "PYTHON=python"
+if not defined CONDA_PREFIX (
+  echo ERROR: conda is not active ^(CONDA_PREFIX is empty^). Run: conda activate drones
+  exit /b 1
+)
+if exist "%CONDA_PREFIX%\python.exe" set "PYTHON=%CONDA_PREFIX%\python.exe"
+if not defined PYTHON set "PYTHON=python"
 if "%SMOKE_STEPS%"=="" set "SMOKE_STEPS=8"
 if "%SMOKE_IDX%"=="" set "SMOKE_IDX=9999"
 

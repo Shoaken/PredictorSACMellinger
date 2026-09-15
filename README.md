@@ -2,7 +2,7 @@
 
 Code for **Predictor-Aligned Soft Actor–Critic for Zero-Shot Quadrotor Sim-to-Real Transfer**.
 
-Xuankun Cai, Ahmed Hamidalddin, Andrea Lecchini-Visintin, Chris Freeman, and Matthew C. Turner. School of Electronics and Computer Science, University of Southampton, SO17 1BJ, UK.
+Anonymous authors, anonymous institution.
 
 The policy mean is a differentiable Crazyflie Mellinger / DSLPID controller. SAC learns the PID gains (with a feasible-gain projection) and a squashed-Gaussian scale. Training is in PyBullet (`HoverAviary`, Crazyflie CF2X, 240 Hz, 5 s hover).
 
@@ -22,8 +22,8 @@ Predictor trains an nHSIC information bottleneck \(Z=\varphi(s,a)\) and aligns t
 ## Installation
 
 ```bash
-git clone --recurse-submodules https://github.com/Shoaken/PredictorSACMellinger.git
-cd PredictorSACMellinger
+git clone --recurse-submodules <anonymous-repository-url>
+cd <repository-root>
 ```
 
 If you already cloned without submodules:
@@ -32,7 +32,9 @@ If you already cloned without submodules:
 git submodule update --init --recursive
 ```
 
-The simulator is the git submodule `env/` ([mahaitongdae/gym-pybullet-drones](https://github.com/mahaitongdae/gym-pybullet-drones.git)), pinned to commit `7856f34`. Do not edit files under `env/gym_pybullet_drones/`. Paper wrappers live in `train/utils/env.py`.
+The simulator is the git submodule `env/` ([mahaitongdae/gym-pybullet-drones](https://github.com/mahaitongdae/gym-pybullet-drones.git)), pinned to commit `7856f34`. This is the third-party STEADY baseline's simulator fork; the commit is pinned so every method uses the same environment.
+
+Do not edit files under `env/gym_pybullet_drones/`. Paper wrappers live in `train/utils/env.py`.
 
 Create the conda environment from the export used for the paper runs (`drones`, Python 3.10, PyTorch 2.5.1, CUDA 12.4):
 
@@ -135,13 +137,18 @@ python main_online_STEADY.py \
   --seed 1
 ```
 
-`--agent_path` must contain `best_actor.pth`, `best_critic.pth`, and `best_feature_mu.pth` from stage 1. `--log_path` is a user-provided radio CSV (or a directory of CSVs). This repository does not ship flight logs. `--feature_dim` must match stage 1 (paper: 512). `max_timesteps` here is **gradient steps** on the offline buffer, not simulator steps.
+`--agent_path` must contain `best_actor.pth`, `best_critic.pth`, and `best_feature_mu.pth` from stage 1. `--log_path` is a user-provided radio CSV (or a directory of CSVs) with the kinematic/motor columns in `RealDataBuffer.CSV_REQUIRED_FIELDS`. If `ctrlMel_pos_error_*` and `ctrlMel_i_err_m*` are missing or NaN, `_reconstruct_ctrlmel_errors` fills the Mellinger rotation-integral state (stock firmware does not log those variables). Hardware `state_log.csv` from `deploy/sim_to_real/` can be used this way. This repository does not ship flight logs. `--feature_dim` must match stage 1 (paper: 512). `max_timesteps` here is **gradient steps** on the offline buffer, not simulator steps.
 
 ## MATLAB Simulink evaluation (`deploy/sim_to_sim`)
 
 Requires MATLAB with Simulink. In MATLAB, set the current folder to `deploy/sim_to_sim/` so `parameter/` and `quadrotor_mellinger.slx` resolve.
 
-Typical pipeline: export gains from a trained actor, optionally inspect one task, write `.mat` files, then batch-evaluate eight tasks.
+`parameter/` ships the paper Mellinger PID gains (`Kp_lin` … `Ki_rot`), not actor/critic networks. Set `param_file` in `main2.m` to a stem in that folder (without `.mat`).
+
+- `Predictor_Seed_*`, `SAC_Seed_*`, `DR_Seed_*`, `STEADY_Seed_456`: main comparison (and Predictor \(\lambda/\beta/B\) sweeps).
+- `Ablation_Seed_*` and `Ablation2_Seed_*`: \((\lambda,\beta)=(0,1)\) and \((0.25,0)\). **Ablation** and **Ablation2** were trained on different machines; **Ablation2** used the same machine as the main comparison.
+
+Typical pipeline if you train a new actor: export gains, optionally inspect one task, write `.mat` files, then batch-evaluate eight tasks.
 
 1. **Export gains** with `scripts/pth_reader.py` from `best_actor.pth` / `last_actor.pth` (under the `log/...` run directory):
 
@@ -153,7 +160,7 @@ Typical pipeline: export gains from a trained actor, optionally inspect one task
 
 2. **`param_set.m`** — paste or uncomment one gain set and set `init_pos` / `goal_pos` (and optional sensor-bias / pulse flags). Then run `quadrotor_mellinger.slx` in Simulink to inspect **that** controller on **that** task. This script does not load `.mat` files and does not report the eight-task scores.
 
-3. **`generate_mat_files.m`** — paste the same MATLAB blocks into `raw_data` (a `% FileName` comment, then the six gain lines). Running it writes `parameter/<FileName>.mat` for `main2.m` to load. The repository ships `parameter/` empty; generate the files locally.
+3. **`generate_mat_files.m`** — paste the same MATLAB blocks into `raw_data` (a `% FileName` comment, then the six gain lines). Running it writes `parameter/<FileName>.mat` for `main2.m` to load. Skip this step for the paper controllers: those `.mat` files are already in `parameter/`.
 
 4. **`main2.m`** — set `param_file` to a stem in `parameter/` (without `.mat`). It loads those controller gains and runs **eight** Simulink tasks (hover, takeoff, 3-D step, pulse; each with and without sensor bias) and prints task-success and convergence for each.
 
@@ -162,7 +169,7 @@ Typical pipeline: export gains from a trained actor, optionally inspect one task
 Pass **your** paths; nothing is hardcoded to a machine.
 
 ```bash
-# Mellinger gains from an actor checkpoint (for param_set.m / generate_mat_files.m)
+# Mellinger gains from an actor checkpoint (Simulink or FlyReferenceMellinger.m)
 python scripts/pth_reader.py --pth path/to/best_actor.pth
 
 # Sim-to-sim bar charts: fill RESULTS in plot_validation.py from main2.m, then
@@ -175,11 +182,29 @@ python scripts/plot_evaluation.py --root path/to/wandb_evaluation_csvs --param b
 python scripts/plot_smooth.py --data-dir path/to/wandb_reward_csvs --param batch
 ```
 
-## Hardware deployment
+## Hardware deployment (`deploy/sim_to_real`)
 
-Waiting update.
+Zero-shot flight on a **Crazyflie 2.1** with a **Loco Positioning Deck**, onboard EKF (`stabilizer.estimator=2`), and the **onboard Mellinger** controller (`stabilizer.controller=2`). Target firmware: **2026.04**. This is not a host-side PID; gains are written as Crazyflie `ctrlMel.*` parameters over the radio (runtime only, not stored in flash).
 
-Firmware, radio CSV schema, and onboard evaluation protocol will be documented here.
+Needs MATLAB (for the helper) and a Python with [cflib](https://github.com/bitcraze/crazyflie-lib-python) (`pip install cflib`). `environment.yml` does not include cflib. Run the `.m` / `.py` files from `deploy/sim_to_real/`. Replace the radio URI in **both** files with yours (they must match). This repository does not ship flight logs; `trajectory.csv` and `state_log.csv` are generated locally and gitignored.
+
+1. Export learned gains: `python scripts/pth_reader.py --pth path/to/best_actor.pth`.
+2. In **`FlyReferenceMellinger.m`**, set the reference (`xref`, `yref`, `zref`, `yaw`, `fixedFrequency`), paste the `Kp_lin` … `Ki_rot` block (or keep the script defaults), set `crazyflieUri` and `pythonExecutable`.
+3. Run that MATLAB script. It writes `trajectory.csv` (timestamp [s] from 0, x/y/z [m], yaw [deg]), applies the gains over the radio, then launches **`FlightLocoMellinger.py`**.
+4. Python checks the Loco deck, resets the EKF, waits for Kalman variance to settle, takes off **0.40 m in 2 s** from the measured launch pose, then tracks the CSV as **offsets from the post-takeoff hover** at 50 Hz (default). Logging covers the reference interval only; landing is not in the CSV. MATLAB prints position RMSE and plots `state_log.csv`.
+
+You can also run `FlightLocoMellinger.py` alone after providing `trajectory.csv`. Keep `USE_CUSTOM_MELLINGER_GAINS=False` if MATLAB already set the gains. Optional `MELLINGER_MASS_KG` writes `ctrlMel.mass` for the flying vehicle.
+
+Paper flights used the **Simulink-best seed of five** for each method, then that controller was flown.
+
+| Method | Seed |
+|---|---|
+| Predictor (\(\lambda=0.25\), \(\beta=1\), \(B=256\)) | 1 |
+| Vanilla SAC | 456 |
+| Domain randomization | 123 |
+| STEADY (stage 2 from Vanilla SAC seed 456) | 456 |
+
+`state_log.csv` is also a valid STEADY `--log_path`. Stock Mellinger does not log `ctrlMel.pos_error_*` or `ctrlMel.i_err_m*`; `RealDataBuffer._reconstruct_ctrlmel_errors` computes them from the logged pose. MATLAB separately computes position RMSE from reference minus measured xyz for the flight plot only.
 
 ## Layout
 
@@ -191,7 +216,8 @@ train/math/hsic.py            # nHSIC (Ma et al. 2020)
 train/networks/features.py
 train/utils/env.py            # paper reward + DR wrapper
 train/utils/buffer.py         # sim replay + radio CSV loader
-deploy/sim_to_sim/            # MATLAB/Simulink 8-task evaluation
+deploy/sim_to_sim/            # MATLAB/Simulink 8-task evaluation; paper PID in parameter/
+deploy/sim_to_real/           # Crazyflie 2.1 + Loco + onboard Mellinger
 scripts/paper_runs.py         # paper grids and one-off training
 scripts/run_paper.sh|.bat     # wrappers for paper_runs.py
 scripts/smoke_test.sh|.bat    # environment check (not a paper run)

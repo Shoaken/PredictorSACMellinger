@@ -2,7 +2,8 @@
 
 Replace --pth with the path to your best_actor.pth or last_actor.pth
 (typically under log/<env>/<alg>/<run>/). Copy the printed Kp_lin ... Ki_rot
-block into deploy/sim_to_sim/param_set.m or generate_mat_files.m.
+block into deploy/sim_to_sim/param_set.m, generate_mat_files.m, or
+deploy/sim_to_real/FlyReferenceMellinger.m.
 
 The paper actor stores the PID values directly (kp_xy, ki_z, ...). After each
 actor step those parameters are projected onto the feasible-gain set; this
@@ -59,7 +60,7 @@ def main():
             val_str = f"[Mean: {value.mean():.4f}]"
         print(f"{key:<30} | {str(list(value.shape)):<15} | {val_str}")
 
-    print("\n% MATLAB gain block (paste into param_set.m or generate_mat_files.m):")
+    print("\n% MATLAB gain block (paste into param_set.m, generate_mat_files.m, or FlyReferenceMellinger.m):")
     print("-" * 30)
     print(
         f"Kp_lin = [{get_val(state_dict, 'kp_xy'):.4f}; "

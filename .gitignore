@@ -232,9 +232,10 @@ cython_debug/
 /log/
 /deploy/network_evaluate.c
 
-# Sim-to-sim generated gains. Keep the empty folder via .gitkeep.
-deploy/sim_to_sim/parameter/*
-!deploy/sim_to_sim/parameter/.gitkeep
+# Hardware flight CSVs / cflib cache (generated locally)
+deploy/sim_to_real/trajectory.csv
+deploy/sim_to_real/state_log.csv
+deploy/sim_to_real/cache/
 
 # Local training artefacts
 wandb/

@@ -2,7 +2,8 @@
 % Parse gain dumps into parameter/<name>.mat files for main2.m to load.
 % Paste the MATLAB-formatted blocks printed by scripts/pth_reader.py into
 % raw_data (filename comment, then Kp_lin ... Ki_rot). Run this script
-% from deploy/sim_to_sim/. The repository ships parameter/ empty.
+% from deploy/sim_to_sim/. Paper PID .mat files are already in parameter/;
+% re-run only if you export new checkpoints.
 
 clear; clc;
 

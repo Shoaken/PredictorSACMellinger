@@ -6,12 +6,14 @@ OptimizedReplayBuffer
 
 RealDataBuffer
     STEADY stage 2. Loads Crazyflie radio / ground-station CSV (not SD-card
-    USD logs). Required columns are CSV_REQUIRED_FIELDS. Motors are scaled
-    motor_m*req / 65535 to match the Mellinger PWM action.
+    USD logs). Kinematic/motor columns are CSV_REQUIRED_FIELDS. Motors are
+    scaled motor_m*req / 65535 to match the Mellinger PWM action.
 
     Reconstructs the 28-D HoverAviary observation: world xyz (not position
     error), quaternion from Euler with pitch sign flip, integral/derivative
-    PID terms. If ctrlMel_* is NaN, firmware-style errors are reconstructed.
+    PID terms. Stock firmware does not log ctrlMel.pos_error_* or
+    ctrlMel.i_err_m*; if those CSV columns are missing or NaN,
+    ``_reconstruct_ctrlmel_errors`` fills the rotation-integral state.
 
     Reward uses the same +2 offset and (2.5, 0.05, 0.05, 0.1) weights as
     simulation **except** w_rpy = 0.1 (HoverAviary default). Simulation
@@ -134,9 +136,14 @@ class RealDataBuffer(ReplayBuffer):
 		"stateEstimateZ_ratePitch_mrad_s",
 		"stateEstimateZ_rateYaw_mrad_s",
 		"motor_m1req", "motor_m2req", "motor_m3req", "motor_m4req",
+	}
+
+	# Optional: stock Mellinger does not expose these as log variables.
+	# Missing or NaN values are filled by _reconstruct_ctrlmel_errors.
+	CSV_CTRLMEL_FIELDS = (
 		"ctrlMel_pos_error_x", "ctrlMel_pos_error_y", "ctrlMel_pos_error_z",
 		"ctrlMel_i_err_mx", "ctrlMel_i_err_my", "ctrlMel_i_err_mz",
-	}
+	)
 
 	def __init__(self, max_size=int(1e6), device='cpu'):
 		super(RealDataBuffer, self).__init__(state_dim = 28, action_dim = 4, max_size=max_size,
@@ -270,17 +277,6 @@ class RealDataBuffer(ReplayBuffer):
 			df['motor_m4req'].to_numpy()[index] / 65535.,
 		]).T
 
-		logged_pos_error = np.vstack([
-			df['ctrlMel_pos_error_x'].to_numpy()[index],
-			df['ctrlMel_pos_error_y'].to_numpy()[index],
-			df['ctrlMel_pos_error_z'].to_numpy()[index],
-		]).T
-		logged_i_err = np.vstack([
-			df['ctrlMel_i_err_mx'].to_numpy()[index],
-			df['ctrlMel_i_err_my'].to_numpy()[index],
-			df['ctrlMel_i_err_mz'].to_numpy()[index],
-		]).T
-
 		if 'time' in df.columns:
 			t = df['time'].to_numpy()[index]
 			dt = np.diff(t, prepend=t[0])
@@ -290,7 +286,23 @@ class RealDataBuffer(ReplayBuffer):
 			freq = float(df['fixedFrequency'].to_numpy()[index][0]) if 'fixedFrequency' in df.columns else 50.0
 			dt = np.full(pos.shape[0], 1.0 / max(freq, 1.0))
 
-		if np.isfinite(logged_pos_error).all() and np.isfinite(logged_i_err).all():
+		use_logged_ctrlmel = all(name in df.columns for name in self.CSV_CTRLMEL_FIELDS)
+		if use_logged_ctrlmel:
+			logged_pos_error = np.vstack([
+				df['ctrlMel_pos_error_x'].to_numpy()[index],
+				df['ctrlMel_pos_error_y'].to_numpy()[index],
+				df['ctrlMel_pos_error_z'].to_numpy()[index],
+			]).T
+			logged_i_err = np.vstack([
+				df['ctrlMel_i_err_mx'].to_numpy()[index],
+				df['ctrlMel_i_err_my'].to_numpy()[index],
+				df['ctrlMel_i_err_mz'].to_numpy()[index],
+			]).T
+			use_logged_ctrlmel = (
+				np.isfinite(logged_pos_error).all()
+				and np.isfinite(logged_i_err).all()
+			)
+		if use_logged_ctrlmel:
 			integral_rpy_error = logged_i_err
 		else:
 			_, integral_rpy_error = self._reconstruct_ctrlmel_errors(

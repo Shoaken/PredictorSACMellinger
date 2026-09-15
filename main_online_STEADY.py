@@ -15,7 +15,8 @@ Pipeline
    That actor *is* Vanilla SAC; ``feature_mu`` is only for this stage.
 
 2. Provide a radio/ground-station CSV (see RealDataBuffer.CSV_REQUIRED_FIELDS).
-   Do not use SD-card USD logs.
+   ``ctrlMel_pos_error_*`` / ``ctrlMel_i_err_m*`` may be omitted; they are
+   reconstructed. Do not use SD-card USD logs.
 
 3. Run this script::
 
